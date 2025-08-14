@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>แดชบอร์ดติดตามการรับสมัครพนักงาน</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Sarabun', sans-serif;
+        }
+        #background-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-size: cover;
+            background-position: center;
+            z-index: -2;
+            transition: opacity 0.5s ease-in-out;
+        }
+        #background-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(243, 244, 246, 0.8); /* Adjusted for more intensity */
+            z-index: -1;
+        }
+        .card {
+            background-color: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            padding: 1.5rem;
+        }
+        .table-responsive {
+            display: block;
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        th, td {
+            text-align: center;
+            padding: 0.75rem;
+            white-space: nowrap;
+        }
+        .highlight-green-target {
+            background-color: #16a34a; color: white; font-weight: bold;
+        }
+        .highlight-red-target {
+            background-color: #dc2626; color: white; font-weight: bold;
+        }
+        .highlight-final-row {
+            background-color: #dbeafe; font-weight: bold;
+        }
+        .highlight-final-met {
+             background-color: #dcfce7; color: #166534; font-weight: bold;
+        }
+        .current-week-col {
+            background-color: #dcfce7 !important; /* Light green for current week */
+        }
+        .modal-overlay {
+            transition: opacity 0.3s ease;
+        }
+        td[title] {
+            cursor: help;
+        }
+        .view-btn {
+            transition: all 0.2s ease-in-out;
+        }
+        .view-btn.active {
+            background-color: #2563eb;
+            color: white;
+            font-weight: bold;
+        }
+        #loader {
+            transition: opacity 0.5s ease-out;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div id="background-container"></div>
+    <div id="background-overlay"></div>
+
+    <!-- Loading Indicator -->
+    <div id="loader" class="fixed inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50">
+        <div class="text-center">
+            <svg class="animate-spin h-10 w-10 text-blue-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            <p class="mt-4 text-lg text-gray-700">กำลังโหลดข้อมูล...</p>
+        </div>
+    </div>
+
+    <div id="dashboard-content" class="max-w-7xl mx-auto space-y-8 opacity-0 transition-opacity duration-500">
+        <!-- Header -->
+        <header class="card">
+            <div>
+                <h1 id="main-title" class="text-2xl md:text-3xl font-bold text-gray-800"></h1>
+                <p id="sub-title" class="text-gray-500 mt-1"></p>
+                 <div class="flex flex-wrap gap-2 mt-4">
+                    <button id="open-summary-modal-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition duration-300">
+                        ดูสรุปทั้งหมด
+                    </button>
+                    <button id="open-training-modal-btn" class="bg-gray-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-600 transition duration-300">
+                        รายละเอียดการฝึกอบรม
+                    </button>
+                    <button id="open-modal-btn" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-300">
+                        อัปเดตข้อมูล
+                    </button>
+                 </div>
+                <p id="last-updated-timestamp" class="text-xs text-gray-500 mt-2 text-right">ยังไม่มีการอัปเดต</p>
+            </div>
+        </header>
+
+        <!-- View Switcher Buttons -->
+        <div class="flex flex-wrap gap-2">
+            <button id="btn-tractor" class="view-btn bg-white text-gray-700 py-2 px-4 rounded-lg shadow-sm hover:bg-gray-100">ขับรถหัวลาก</button>
+            <button id="btn-rs_ech" class="view-btn bg-white text-gray-700 py-2 px-4 rounded-lg shadow-sm hover:bg-gray-100">RS/ECH</button>
+            <button id="btn-rtg" class="view-btn bg-white text-gray-700 py-2 px-4 rounded-lg shadow-sm hover:bg-gray-100">RTG</button>
+            <button id="btn-crane" class="view-btn bg-white text-gray-700 py-2 px-4 rounded-lg shadow-sm hover:bg-gray-100">CRANE</button>
+        </div>
+
+        <!-- Key Metrics -->
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-6">
+            <div class="card rounded-full flex flex-col items-center justify-center aspect-square p-2"><h2 class="text-sm md:text-base font-medium text-gray-500 text-center">เป้าหมายพนักงาน</h2><p id="target-drivers" class="text-3xl md:text-4xl font-bold text-blue-600"></p></div>
+            <div class="card rounded-full flex flex-col items-center justify-center aspect-square p-2"><h2 class="text-sm md:text-base font-medium text-gray-500 text-center">พนักงานปัจจุบัน</h2><p id="current-drivers" class="text-3xl md:text-4xl font-bold text-gray-800"></p></div>
+            <div class="card rounded-full flex flex-col items-center justify-center aspect-square p-2">
+                <h2 class="text-sm md:text-base font-medium text-gray-500 text-center">พนักงานใหม่ (ฝึกขับ)</h2>
+                <p id="trainee-drivers" class="text-3xl md:text-4xl font-bold text-purple-600">0</p>
+            </div>
+            <div class="card rounded-full flex flex-col items-center justify-center aspect-square p-2"><h2 class="text-sm md:text-base font-medium text-gray-500 text-center">ต้องการเพิ่ม</h2><p id="needed-drivers" class="text-3xl md:text-4xl font-bold text-orange-500"></p></div>
+            <div class="card rounded-full flex flex-col items-center justify-center aspect-square p-2 bg-green-100 border border-green-200"><h2 class="text-sm md:text-base font-medium text-green-700 text-center">คาดว่าจะครบตามเป้า (ตามแผน)</h2><p id="completion-week" class="text-2xl md:text-3xl font-bold text-green-800 text-center">-</p></div>
+        </div>
+
+        <!-- New Composition Chart -->
+        <div class="card">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">กราฟวิเคราะห์องค์ประกอบการเปลี่ยนแปลง (Actual)</h2>
+            <div class="relative h-80"><canvas id="compositionChart"></canvas></div>
+        </div>
+
+        <!-- Chart -->
+        <div class="card">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">แนวโน้มจำนวนพนักงานที่พร้อมปฏิบัติงาน (Actual)</h2>
+            <div class="relative h-80"><canvas id="progressChart"></canvas></div>
+        </div>
+
+        <!-- Data Table -->
+        <div class="card">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">ตารางเปรียบเทียบเป้าหมายและผลการดำเนินงาน</h2>
+            <div class="table-responsive"><table class="w-full border-collapse"><thead class="bg-gray-100"><tr><th class="sticky left-0 bg-gray-100 z-10">รายการ</th></tr></thead><tbody id="data-table-body" class="bg-white"></tbody></table></div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="summary-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl">
+            <div class="p-6 border-b flex justify-between items-center">
+                <h3 class="text-xl font-bold text-gray-800">สรุปภาพรวมทุกตำแหน่ง</h3>
+                <button id="close-summary-modal-btn" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+            </div>
+            <div class="p-6">
+                <table class="w-full">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="text-left">ตำแหน่ง</th>
+                            <th>เป้าหมาย</th>
+                            <th>ปัจจุบัน</th>
+                            <th>ฝึกขับ</th>
+                            <th>ต้องการเพิ่ม</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Summary data will be populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="training-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg">
+            <div class="p-6 border-b flex justify-between items-center">
+                <h3 class="text-xl font-bold text-gray-800">สรุปรายละเอียดการฝึกอบรม</h3>
+                <button id="close-training-modal-btn" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+            </div>
+            <div class="p-6">
+                <p class="text-sm text-gray-600 mb-4">คำนวณจากชั่วโมงทำงาน 8 ชั่วโมง/วัน และทำงาน 6 วัน/สัปดาห์ (48 ชั่วโมง/สัปดาห์)</p>
+                <div class="space-y-4"></div>
+            </div>
+        </div>
+    </div>
+    <div id="update-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md flex flex-col max-h-[90vh]">
+            <div class="p-6 border-b">
+                <h3 class="text-xl font-bold text-gray-800">อัปเดตข้อมูล</h3>
+            </div>
+            <div class="overflow-y-auto">
+                <form id="update-form" class="p-6 space-y-4">
+                     <div>
+                        <label for="target-input" class="block text-sm font-medium text-gray-700 mb-1">เป้าหมายพนักงาน</label>
+                        <input type="number" id="target-input" min="0" class="w-full p-2 border border-gray-300 rounded-md" required>
+                    </div>
+                     <div>
+                        <label for="start-count-input" class="block text-sm font-medium text-gray-700 mb-1">พนักงานปัจจุบัน (ค่าเริ่มต้น)</label>
+                        <input type="number" id="start-count-input" min="0" class="w-full p-2 border border-gray-300 rounded-md" required>
+                    </div>
+                    <hr/>
+                    <div>
+                        <label for="week-select" class="block text-sm font-medium text-gray-700 mb-1">เลือกสัปดาห์ที่จะแก้ไข</label>
+                        <select id="week-select" class="w-full p-2 border border-gray-300 rounded-md"></select>
+                    </div>
+                    <div>
+                        <label for="weekly-target-input" class="block text-sm font-medium text-gray-700 mb-1">เป้าหมายรับใหม่/สัปดาห์</label>
+                        <input type="number" id="weekly-target-input" min="0" class="w-full p-2 border border-gray-300 rounded-md" required>
+                    </div>
+                    <div>
+                        <label for="actual-recruit-input" class="block text-sm font-medium text-gray-700 mb-1">รับใหม่ (Actual)</label>
+                        <input type="number" id="actual-recruit-input" min="0" class="w-full p-2 border border-gray-300 rounded-md" required>
+                    </div>
+                     <div>
+                        <label for="transfer-in-input" class="block text-sm font-medium text-gray-700 mb-1">ย้ายเข้า (จากภายนอก)</label>
+                        <input type="number" id="transfer-in-input" min="0" class="w-full p-2 border border-gray-300 rounded-md" required>
+                    </div>
+                    <div>
+                        <label for="transfer-out-input" class="block text-sm font-medium text-gray-700 mb-1">ย้ายออก (ไปเครื่องมืออื่น)</label>
+                        <input type="number" id="transfer-out-input" min="0" class="w-full p-2 border border-gray-300 rounded-md" required>
+                    </div>
+                     <div>
+                        <label for="transfer-out-reason" class="block text-sm font-medium text-gray-700 mb-1">ปลายทางที่ย้ายไป</label>
+                        <select id="transfer-out-reason" class="w-full p-2 border border-gray-300 rounded-md"></select>
+                    </div>
+                    <div>
+                        <label for="resign-input" class="block text-sm font-medium text-gray-700 mb-1">ลาออก</label>
+                        <input type="number" id="resign-input" min="0" class="w-full p-2 border border-gray-300 rounded-md" required>
+                    </div>
+                     <div>
+                        <label for="resign-reason" class="block text-sm font-medium text-gray-700 mb-1">เหตุผลที่ลาออก</label>
+                        <textarea id="resign-reason" rows="2" class="w-full p-2 border border-gray-300 rounded-md"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 border-t flex justify-between items-center">
+                <div>
+                    <button id="add-week-btn" type="button" class="bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-600">เพิ่มสัปดาห์</button>
+                    <button id="remove-week-btn" type="button" class="bg-red-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-600">ลบสัปดาห์ล่าสุด</button>
+                </div>
+                <div>
+                    <button id="close-modal-btn" type="button" class="bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300">ปิด</button>
+                    <button id="save-data-btn" type="submit" form="update-form" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">บันทึกข้อมูล</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getFirestore, collection, doc, onSnapshot, setDoc, getDocs, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+          apiKey: "AIzaSyC21FHRjmKQmqfSc1wcltcJXoRg6A1KWaM",
+          authDomain: "equipment-tracker-a5403.firebaseapp.com",
+          projectId: "equipment-tracker-a5403",
+          storageBucket: "equipment-tracker-a5403.appspot.com",
+          messagingSenderId: "1004059763156",
+          appId: "1:1004059763156:web:9710220fa81991ab483641",
+          measurementId: "G-G3E7JRF1SV"
+        };
+
+        const appId = 'equipment-tracker-a5403';
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const COLLECTION_NAME = `recruitment_plans`;
+
+        // --- GLOBAL STATE ---
+        let allData = {};
+        let currentView = 'tractor';
+
+        // --- INITIAL DATA (used if Firestore is empty) ---
+        const initialData = {
+             tractor: {
+                title: "แดชบอร์ดติดตามการรับสมัครขับรถหัวลาก",
+                subtitle: "ข้อมูลสรุปและแผนการรับสมัครรายสัปดาห์",
+                imageUrl: "https://img5.pic.in.th/file/secure-sv1/NOA_8414.jpg",
+                target: 146,
+                startCount: 134,
+                trainingHours: 120,
+                trainingWeeks: 3,
+                weeks: Array.from({length: 12}, (_, i) => ({ week: 31 + i, weeklyTarget: 0, actualRecruit: 0, transferIn: 0, transferOut: 0, resign: 0, transferOutReason: "", resignReason: "" }))
+            },
+            rs_ech: {
+                title: "แดชบอร์ดติดตามการรับสมัคร RS/ECH Operator",
+                subtitle: "ข้อมูลสรุปและแผนการรับสมัครรายสัปดาห์",
+                imageUrl: "https://img5.pic.in.th/file/secure-sv1/NOA_8582.jpg",
+                target: 80,
+                startCount: 75,
+                trainingHours: 420,
+                trainingWeeks: 9,
+                weeks: Array.from({length: 12}, (_, i) => ({ week: 31 + i, weeklyTarget: 0, actualRecruit: 0, transferIn: 0, transferOut: 0, resign: 0, transferOutReason: "", resignReason: "" }))
+            },
+            rtg: {
+                title: "แดชบอร์ดติดตามการรับสมัคร RTG Operator",
+                subtitle: "ข้อมูลสรุปและแผนการรับสมัครรายสัปดาห์",
+                imageUrl: "https://img2.pic.in.th/pic/Screenshot-2025-08-07-232016.png",
+                target: 60,
+                startCount: 58,
+                trainingHours: 500,
+                trainingWeeks: 11,
+                weeks: Array.from({length: 12}, (_, i) => ({ week: 31 + i, weeklyTarget: 0, actualRecruit: 0, transferIn: 0, transferOut: 0, resign: 0, transferOutReason: "", resignReason: "" }))
+            },
+            crane: {
+                title: "แดชบอร์ดติดตามการรับสมัคร CRANE Operator",
+                subtitle: "ข้อมูลสรุปและแผนการรับสมัครรายสัปดาห์",
+                imageUrl: "https://img2.pic.in.th/pic/NOA_8006.jpg",
+                target: 40,
+                startCount: 35,
+                trainingHours: 288,
+                trainingWeeks: 6,
+                weeks: Array.from({length: 12}, (_, i) => ({ week: 31 + i, weeklyTarget: 0, actualRecruit: 0, transferIn: 0, transferOut: 0, resign: 0, transferOutReason: "", resignReason: "" }))
+            }
+        };
+
+        const keyToNameMap = {
+            tractor: "ขับรถหัวลาก",
+            rs_ech: "RS/ECH",
+            rtg: "RTG",
+            crane: "CRANE"
+        };
+        
+        // --- UI Elements ---
+        const loader = document.getElementById('loader');
+        const dashboardContent = document.getElementById('dashboard-content');
+
+        // --- Firebase Functions ---
+        async function initializeDataIfNeeded() {
+            const collectionRef = collection(db, COLLECTION_NAME);
+            const snapshot = await getDocs(collectionRef);
+            if (snapshot.empty) {
+                console.log("No data found in Firestore. Initializing with default data...");
+                const batch = writeBatch(db);
+                Object.keys(initialData).forEach(key => {
+                    const docRef = doc(db, COLLECTION_NAME, key);
+                    batch.set(docRef, { ...initialData[key], updatedAt: serverTimestamp() });
+                });
+                await batch.commit();
+                console.log("Initial data has been written to Firestore.");
+            } else {
+                console.log("Data already exists in Firestore.");
+            }
+        }
+
+        function listenForDataChanges() {
+            const collectionRef = collection(db, COLLECTION_NAME);
+            onSnapshot(collectionRef, (snapshot) => {
+                if (snapshot.empty) {
+                    console.log("Collection is empty, initializing...");
+                    initializeDataIfNeeded();
+                    return;
+                }
+                snapshot.forEach((doc) => {
+                    allData[doc.id] = doc.data();
+                });
+                console.log("Real-time data updated:", allData);
+                renderDashboard();
+                
+                // Show content after first data load
+                loader.style.opacity = '0';
+                setTimeout(() => loader.style.display = 'none', 500);
+                dashboardContent.style.opacity = '1';
+            }, (error) => {
+                console.error("Error listening to data:", error);
+                loader.textContent = "เกิดข้อผิดพลาดในการโหลดข้อมูล";
+            });
+        }
+        
+        // --- Main App Logic ---
+        function renderDashboard() {
+            if (!allData[currentView]) {
+                console.log(`No data for view: ${currentView}. Waiting for Firestore...`);
+                return;
+            }
+            const plan = allData[currentView];
+            const processedData = calculateWeeklyProgress(plan);
+            
+            const currentWeekNum = getWeekNumber(new Date());
+            const startDisplayWeek = currentWeekNum - 2;
+            const endDisplayWeek = currentWeekNum + 5;
+
+            let displayData = {
+                ...processedData,
+                weeks: processedData.weeks.filter(week => week.week >= startDisplayWeek && week.week <= endDisplayWeek)
+            };
+
+            if (displayData.weeks.length === 0 && processedData.weeks.length > 0) {
+                 displayData.weeks = processedData.weeks.slice(0, 8);
+            }
+
+            updateKeyMetrics(plan, processedData);
+            renderTable(displayData);
+            renderChart(displayData, plan.target);
+            renderCompositionChart(displayData);
+            updateActiveButton();
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            setupEventListeners();
+            try {
+                await signInAnonymously(auth);
+                console.log("Authentication successful. User:", auth.currentUser?.uid);
+                listenForDataChanges();
+            } catch (error) {
+                console.error("Authentication failed:", error);
+                loader.textContent = "การยืนยันตัวตนล้มเหลว";
+            }
+        });
+
+        function calculateWeeklyProgress(plan) {
+            let currentReadyDrivers = plan.startCount;
+            const results = { weeks: [] };
+            const allRecruitsAndTransfers = plan.weeks.map(w => w.actualRecruit + w.transferIn);
+
+            plan.weeks.forEach((weekData, index) => {
+                const trainingCompletions = (index >= plan.trainingWeeks) ? allRecruitsAndTransfers[index - plan.trainingWeeks] : 0;
+                const sourceWeekIndex = index - plan.trainingWeeks;
+                const trainingSourceWeek = sourceWeekIndex >= 0 ? plan.weeks[sourceWeekIndex].week : null;
+                
+                const departures = weekData.transferOut + weekData.resign;
+                const endOfWeekDrivers = currentReadyDrivers + trainingCompletions - departures;
+                
+                let currentTrainees = 0;
+                for (let i = 0; i < plan.trainingWeeks; i++) {
+                    if (index - i >= 0) {
+                        currentTrainees += allRecruitsAndTransfers[index - i];
+                    }
+                }
+                
+                results.weeks.push({ ...weekData, trainingCompletions, departures, endOfWeekDrivers, currentTrainees, trainingSourceWeek });
+                currentReadyDrivers = endOfWeekDrivers;
+            });
+            return results;
+        }
+
+        function calculateProjectedCompletion(plan) {
+            let projectedReadyDrivers = plan.startCount;
+            const projectedRecruits = plan.weeks.map(w => w.weeklyTarget + w.transferIn);
+
+            for (let index = 0; index < plan.weeks.length; index++) {
+                const weekData = plan.weeks[index];
+                const trainingCompletions = (index >= plan.trainingWeeks) ? projectedRecruits[index - plan.trainingWeeks] : 0;
+                const departures = weekData.transferOut + weekData.resign;
+                
+                projectedReadyDrivers += trainingCompletions - departures;
+
+                if (projectedReadyDrivers >= plan.target) {
+                    return `สัปดาห์ที่ ${weekData.week}`;
+                }
+            }
+            return "เกินแผนที่วางไว้";
+        }
+        
+        function getWeekNumber(d) {
+            d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+            var yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+            var weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+            return weekNo;
+        }
+
+        function updateKeyMetrics(plan, processedData) {
+            document.getElementById('main-title').textContent = plan.title;
+            document.getElementById('sub-title').textContent = plan.subtitle;
+            document.getElementById('target-drivers').textContent = plan.target;
+            document.getElementById('current-drivers').textContent = plan.startCount;
+            
+            const bgContainer = document.getElementById('background-container');
+            if (bgContainer.style.backgroundImage !== `url("${plan.imageUrl}")`) {
+                bgContainer.style.backgroundImage = `url(${plan.imageUrl})`;
+            }
+            
+            const currentWeekNum = getWeekNumber(new Date());
+            const currentWeekData = processedData.weeks.find(w => w.week === currentWeekNum);
+            
+            const totalTrainees = currentWeekData ? currentWeekData.currentTrainees : 0;
+            document.getElementById('trainee-drivers').textContent = totalTrainees;
+
+            const needed = plan.target - (plan.startCount + totalTrainees);
+            const neededEl = document.getElementById('needed-drivers');
+            neededEl.textContent = needed > 0 ? needed : 0;
+            
+            neededEl.classList.remove('text-green-600', 'text-orange-500', 'text-red-600');
+            if (needed <= 0) {
+                neededEl.classList.add('text-green-600');
+            } else if (needed / plan.target <= 0.25) {
+                neededEl.classList.add('text-orange-500');
+            } else {
+                neededEl.classList.add('text-red-600');
+            }
+
+
+            const projectedWeek = calculateProjectedCompletion(plan);
+            const completionWeekEl = document.getElementById('completion-week');
+            completionWeekEl.textContent = projectedWeek;
+            
+            if (projectedWeek === "เกินแผนที่วางไว้") {
+                 completionWeekEl.classList.remove('text-4xl', 'text-3xl');
+                 completionWeekEl.classList.add('text-xl');
+            } else {
+                 completionWeekEl.classList.remove('text-xl');
+                 completionWeekEl.classList.add('text-2xl', 'md:text-3xl');
+            }
+        }
+
+        function renderTable(processedData) {
+            const tableHead = document.querySelector('#data-table-body').previousElementSibling.querySelector('tr');
+            const tableBody = document.getElementById('data-table-body');
+            const currentWeekNum = getWeekNumber(new Date());
+
+            tableBody.innerHTML = ''; 
+            while (tableHead.children.length > 1) { tableHead.removeChild(tableHead.lastChild); }
+            
+            processedData.weeks.forEach(week => {
+                const th = document.createElement('th');
+                th.textContent = `สัปดาห์ที่ ${week.week}`;
+                if (week.week === currentWeekNum) {
+                    th.classList.add('current-week-col');
+                }
+                tableHead.appendChild(th);
+            });
+
+            const rows = [
+                { key: 'weeklyTarget', label: 'เป้าหมายรับใหม่/สัปดาห์' },
+                { key: 'actualRecruit', label: 'รับใหม่ (Actual)', colorCodeVsTarget: 'weeklyTarget' },
+                { key: 'transferIn', label: 'ย้ายเข้า' },
+                { key: 'trainingCompletions', label: `จบการอบรม (พร้อมขับ)`, hasSourceTooltip: true },
+                { key: 'departures', label: 'ย้ายออก/ลาออก', isNegative: true, hasTooltip: true },
+                { key: 'endOfWeekDrivers', label: 'พนักงานพร้อมขับ (สิ้นสัปดาห์)', isFinalRow: true },
+            ];
+
+            rows.forEach(rowInfo => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-t';
+                if (rowInfo.isFinalRow) tr.className += ' highlight-final-row';
+                const labelTd = document.createElement('td');
+                labelTd.textContent = rowInfo.label;
+                labelTd.className = 'sticky left-0 bg-white z-10 text-left font-medium text-gray-700';
+                if (rowInfo.isFinalRow) labelTd.className = 'sticky left-0 highlight-final-row z-10 text-left font-bold text-gray-800';
+                tr.appendChild(labelTd);
+
+                processedData.weeks.forEach(week => {
+                    const td = document.createElement('td');
+                    const value = week[rowInfo.key];
+                    td.textContent = value;
+
+                    if (rowInfo.hasTooltip) {
+                        let tooltipText = [];
+                        if (week.transferOut > 0 && week.transferOutReason) {
+                            const reasonText = `ย้ายไปขับ ${keyToNameMap[week.transferOutReason]}`;
+                            tooltipText.push(`ย้ายออก: ${reasonText}`);
+                        }
+                        if (week.resign > 0 && week.resignReason) {
+                            tooltipText.push(`ลาออก: ${week.resignReason}`);
+                        }
+                        if (tooltipText.length > 0) {
+                            td.title = tooltipText.join('\n');
+                        }
+                    }
+                    
+                    if (rowInfo.hasSourceTooltip && week.trainingCompletions > 0) {
+                        if (week.trainingSourceWeek) {
+                            td.title = `มาจากสัปดาห์ที่ ${week.trainingSourceWeek}`;
+                        }
+                    }
+
+                    if(rowInfo.key === 'transferIn' && value > 0) { td.classList.add('text-green-600'); }
+                    if (rowInfo.colorCodeVsTarget) {
+                        td.className = value >= week[rowInfo.colorCodeVsTarget] ? 'highlight-green-target' : 'highlight-red-target';
+                    }
+                    if(rowInfo.isNegative && value > 0) { td.textContent = `-${value}`; td.classList.add('text-red-600'); }
+                    if (rowInfo.isFinalRow && value >= allData[currentView].target) { td.classList.add('highlight-final-met'); }
+                    tr.appendChild(td);
+                });
+                tableBody.appendChild(tr);
+            });
+        }
+
+        function renderChart(processedData, target) {
+            const chartElement = document.getElementById('progressChart');
+            if (window.myLineChart) { window.myLineChart.destroy(); }
+            const ctx = chartElement.getContext('2d');
+            const labels = processedData.weeks.map(w => `สัปดาห์ที่ ${w.week}`);
+            const readyDriverData = processedData.weeks.map(w => w.endOfWeekDrivers);
+            window.myLineChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'พนักงานพร้อมปฏิบัติงาน', data: readyDriverData, borderColor: '#2563eb', backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                        fill: true, tension: 0.3, pointRadius: 4, pointBackgroundColor: '#2563eb',
+                    }, {
+                        label: 'เป้าหมาย', data: Array(labels.length).fill(target), borderColor: '#16a34a', borderDash: [5, 5],
+                        fill: false, pointRadius: 0,
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: false, grid: { color: '#e5e7eb' } }, x: { grid: { display: false } } },
+                    plugins: { legend: { position: 'top' }, tooltip: { mode: 'index', intersect: false } }
+                }
+            });
+        }
+
+        function renderCompositionChart(processedData) {
+            const chartElement = document.getElementById('compositionChart');
+            if (window.myCompositionChart) { window.myCompositionChart.destroy(); }
+            const ctx = chartElement.getContext('2d');
+            const labels = processedData.weeks.map(w => `สัปดาห์ที่ ${w.week}`);
+            
+            const dataIn = processedData.weeks.map(w => w.actualRecruit + w.transferIn);
+            const dataOut = processedData.weeks.map(w => - (w.transferOut + w.resign));
+
+            window.myCompositionChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'รับใหม่ / ย้ายเข้า',
+                            data: dataIn,
+                            backgroundColor: '#22c55e',
+                        },
+                        {
+                            label: 'ย้ายออก / ลาออก',
+                            data: dataOut,
+                            backgroundColor: '#ef4444',
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, beginAtZero: true }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += Math.abs(context.parsed.y);
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function updateActiveButton() {
+            document.querySelectorAll('.view-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`btn-${currentView}`).classList.add('active');
+        }
+
+        // --- MODAL AND EVENT LISTENERS ---
+        function setupEventListeners() {
+            const modal = document.getElementById('update-modal');
+            const openBtn = document.getElementById('open-modal-btn');
+            const closeBtn = document.getElementById('close-modal-btn');
+            const form = document.getElementById('update-form');
+            const targetInput = document.getElementById('target-input');
+            const startCountInput = document.getElementById('start-count-input');
+            const weekSelect = document.getElementById('week-select');
+            const weeklyTargetInput = document.getElementById('weekly-target-input');
+            const actualRecruitInput = document.getElementById('actual-recruit-input');
+            const transferInInput = document.getElementById('transfer-in-input');
+            const transferOutInput = document.getElementById('transfer-out-input');
+            const resignInput = document.getElementById('resign-input');
+            const transferOutReasonInput = document.getElementById('transfer-out-reason');
+            const resignReasonInput = document.getElementById('resign-reason');
+            const addWeekBtn = document.getElementById('add-week-btn');
+            const removeWeekBtn = document.getElementById('remove-week-btn');
+
+            const trainingModal = document.getElementById('training-modal');
+            const openTrainingBtn = document.getElementById('open-training-modal-btn');
+            const closeTrainingBtn = document.getElementById('close-training-modal-btn');
+
+            const summaryModal = document.getElementById('summary-modal');
+            const openSummaryBtn = document.getElementById('open-summary-modal-btn');
+            const closeSummaryBtn = document.getElementById('close-summary-modal-btn');
+
+            // View switcher buttons
+            document.getElementById('btn-tractor').addEventListener('click', () => { currentView = 'tractor'; renderDashboard(); });
+            document.getElementById('btn-rs_ech').addEventListener('click', () => { currentView = 'rs_ech'; renderDashboard(); });
+            document.getElementById('btn-rtg').addEventListener('click', () => { currentView = 'rtg'; renderDashboard(); });
+            document.getElementById('btn-crane').addEventListener('click', () => { currentView = 'crane'; renderDashboard(); });
+
+            // Open/Close Modals
+            openTrainingBtn.addEventListener('click', () => {
+                populateTrainingDetails();
+                trainingModal.classList.remove('hidden');
+            });
+            closeTrainingBtn.addEventListener('click', () => trainingModal.classList.add('hidden'));
+            
+            openSummaryBtn.addEventListener('click', () => {
+                populateSummaryDetails();
+                summaryModal.classList.remove('hidden');
+            });
+            closeSummaryBtn.addEventListener('click', () => summaryModal.classList.add('hidden'));
+
+
+            // Open Modal
+            openBtn.addEventListener('click', () => {
+                const plan = allData[currentView];
+                targetInput.value = plan.target;
+                startCountInput.value = plan.startCount;
+                populateWeekSelect(plan);
+                populateTransferOutReasons();
+                updateFormForSelectedWeek(plan);
+                modal.classList.remove('hidden');
+            });
+
+            // Close Modal
+            closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
+            
+            // Update form when week changes
+            weekSelect.addEventListener('change', () => updateFormForSelectedWeek(allData[currentView]));
+
+            // Add/Remove Week Buttons
+            addWeekBtn.addEventListener('click', async () => {
+                const plan = allData[currentView];
+                const lastWeek = plan.weeks[plan.weeks.length - 1];
+                const newWeek = {
+                    week: lastWeek.week + 1,
+                    weeklyTarget: 0,
+                    actualRecruit: 0,
+                    transferIn: 0,
+                    transferOut: 0,
+                    resign: 0,
+                    transferOutReason: "",
+                    resignReason: ""
+                };
+                plan.weeks.push(newWeek);
+                const docRef = doc(db, COLLECTION_NAME, currentView);
+                await setDoc(docRef, plan, { merge: true });
+                populateWeekSelect(plan);
+                weekSelect.value = newWeek.week;
+                updateFormForSelectedWeek(plan);
+            });
+
+            removeWeekBtn.addEventListener('click', async () => {
+                const plan = allData[currentView];
+                if (plan.weeks.length > 1) {
+                    plan.weeks.pop();
+                    const docRef = doc(db, COLLECTION_NAME, currentView);
+                    await setDoc(docRef, plan, { merge: true });
+                    populateWeekSelect(plan);
+                    updateFormForSelectedWeek(plan);
+                } else {
+                    alert("ไม่สามารถลบสัปดาห์สุดท้ายได้");
+                }
+            });
+
+
+            // Handle form submission
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const plan = allData[currentView];
+                const selectedWeek = parseInt(weekSelect.value, 10);
+                const weekData = plan.weeks.find(w => w.week === selectedWeek);
+                if (!weekData) return;
+
+                const batch = writeBatch(db);
+
+                const oldTransferOutCount = weekData.transferOut;
+                const oldTransferOutReasonKey = weekData.transferOutReason;
+
+                const newTarget = parseInt(targetInput.value, 10);
+                const newStartCount = parseInt(startCountInput.value, 10);
+                const newWeeklyTarget = parseInt(weeklyTargetInput.value, 10);
+                const newActualRecruit = parseInt(actualRecruitInput.value, 10);
+                const newTransferIn = parseInt(transferInInput.value, 10);
+                const newTransferOutCount = parseInt(transferOutInput.value, 10);
+                const newResignCount = parseInt(resignInput.value, 10);
+                const newTransferOutReasonKey = transferOutReasonInput.value;
+                const newResignReason = resignReasonInput.value;
+
+                // Create a deep copy of the current plan to modify
+                const updatedPlan = JSON.parse(JSON.stringify(plan));
+                updatedPlan.target = newTarget;
+                updatedPlan.startCount = newStartCount;
+                const updatedWeekData = updatedPlan.weeks.find(w => w.week === selectedWeek);
+
+                updatedWeekData.weeklyTarget = newWeeklyTarget;
+                updatedWeekData.actualRecruit = newActualRecruit;
+                updatedWeekData.transferIn = newTransferIn;
+                updatedWeekData.transferOut = newTransferOutCount;
+                updatedWeekData.resign = newResignCount;
+                updatedWeekData.transferOutReason = newTransferOutReasonKey;
+                updatedWeekData.resignReason = newResignReason;
+
+                const currentDocRef = doc(db, COLLECTION_NAME, currentView);
+                batch.set(currentDocRef, updatedPlan);
+
+                // Revert old transfer
+                if (oldTransferOutCount > 0 && oldTransferOutReasonKey && allData[oldTransferOutReasonKey]) {
+                    const oldDestinationPlan = JSON.parse(JSON.stringify(allData[oldTransferOutReasonKey]));
+                    const oldDestinationWeekData = oldDestinationPlan.weeks.find(w => w.week === selectedWeek);
+                    if (oldDestinationWeekData) {
+                        oldDestinationWeekData.transferIn -= oldTransferOutCount;
+                        if (oldDestinationWeekData.transferIn < 0) oldDestinationWeekData.transferIn = 0;
+                        const oldDestDocRef = doc(db, COLLECTION_NAME, oldTransferOutReasonKey);
+                        batch.set(oldDestDocRef, oldDestinationPlan);
+                    }
+                }
+
+                // Apply new transfer
+                if (newTransferOutCount > 0 && newTransferOutReasonKey && allData[newTransferOutReasonKey]) {
+                    const newDestinationPlan = allData[newTransferOutReasonKey];
+                    // If the old and new destinations are different, we need to load the new one fresh
+                    if (newTransferOutReasonKey !== oldTransferOutReasonKey) {
+                        const freshNewDestPlan = JSON.parse(JSON.stringify(allData[newTransferOutReasonKey]));
+                        const newDestinationWeekData = freshNewDestPlan.weeks.find(w => w.week === selectedWeek);
+                        if (newDestinationWeekData) {
+                            newDestinationWeekData.transferIn += newTransferOutCount;
+                            const newDestDocRef = doc(db, COLLECTION_NAME, newTransferOutReasonKey);
+                            batch.set(newDestDocRef, freshNewDestPlan);
+                        }
+                    }
+                }
+                
+                try {
+                    await batch.commit();
+                    console.log("Batch write successful!");
+                } catch (error) {
+                    console.error("Batch write failed: ", error);
+                }
+
+                const now = new Date();
+                const options = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+                const formattedDate = now.toLocaleDateString('th-TH', options);
+                document.getElementById('last-updated-timestamp').textContent = `อัปเดตล่าสุด: ${formattedDate}`;
+
+                modal.classList.add('hidden');
+                // onSnapshot will handle the re-render automatically
+            });
+
+            function populateWeekSelect(plan) {
+                weekSelect.innerHTML = '';
+                plan.weeks.forEach(week => {
+                    const option = document.createElement('option');
+                    option.value = week.week;
+                    option.textContent = `สัปดาห์ที่ ${week.week}`;
+                    weekSelect.appendChild(option);
+                });
+            }
+            
+            function populateTransferOutReasons() {
+                transferOutReasonInput.innerHTML = '';
+                const defaultOption = document.createElement('option');
+                defaultOption.value = "";
+                defaultOption.textContent = "-- เลือกปลายทาง --";
+                transferOutReasonInput.appendChild(defaultOption);
+
+                Object.keys(allData).forEach(key => {
+                    if (key !== currentView) {
+                        const option = document.createElement('option');
+                        option.value = key;
+                        option.textContent = `ย้ายไปขับ ${keyToNameMap[key]}`;
+                        transferOutReasonInput.appendChild(option);
+                    }
+                });
+            }
+
+            function populateTrainingDetails() {
+                const container = trainingModal.querySelector('.space-y-4');
+                container.innerHTML = '';
+                const hoursPerWeek = 48;
+                const daysPerWeek = 6;
+
+                Object.keys(allData).forEach(key => {
+                    const plan = allData[key];
+                    const totalHours = plan.trainingHours;
+                    const totalWeeks = Math.ceil(totalHours / hoursPerWeek);
+                    const totalDays = Math.ceil(totalHours / 8);
+
+                    const detailHtml = `
+                        <div class="p-3 bg-gray-50 rounded-lg">
+                            <h4 class="font-bold text-gray-800">${keyToNameMap[key]}</h4>
+                            <div class="flex justify-between text-gray-600 mt-1">
+                                <span>ชั่วโมงฝึกขั้นต่ำ:</span>
+                                <span class="font-semibold">${totalHours} ชั่วโมง</span>
+                            </div>
+                            <div class="flex justify-between text-gray-600">
+                                <span>คิดเป็น (ทำงาน 6 วัน/สัปดาห์):</span>
+                                <span class="font-semibold">${totalDays} วัน / ${totalWeeks} สัปดาห์</span>
+                            </div>
+                        </div>
+                    `;
+                    container.innerHTML += detailHtml;
+                });
+            }
+            
+            function populateSummaryDetails() {
+                const container = summaryModal.querySelector('tbody');
+                container.innerHTML = '';
+                const currentWeekNum = getWeekNumber(new Date());
+
+                Object.keys(allData).forEach(key => {
+                    const plan = allData[key];
+                    if (!plan) return;
+
+                    const processedData = calculateWeeklyProgress(plan);
+                    const currentWeekData = processedData.weeks.find(w => w.week === currentWeekNum);
+                    
+                    const totalTrainees = currentWeekData ? currentWeekData.currentTrainees : 0;
+                    const needed = plan.target - (plan.startCount + totalTrainees);
+
+                    const row = `
+                        <tr class="border-b">
+                            <td class="text-left font-bold text-gray-800 p-3">${keyToNameMap[key]}</td>
+                            <td class="p-3">${plan.target}</td>
+                            <td class="p-3">${plan.startCount}</td>
+                            <td class="p-3">${totalTrainees}</td>
+                            <td class="font-bold text-orange-500 p-3">${needed > 0 ? needed : 0}</td>
+                        </tr>
+                    `;
+                    container.innerHTML += row;
+                });
+            }
+
+            function updateFormForSelectedWeek(plan) {
+                const selectedWeek = parseInt(weekSelect.value, 10);
+                const weekData = plan.weeks.find(w => w.week === selectedWeek);
+                if (weekData) {
+                    weeklyTargetInput.value = weekData.weeklyTarget;
+                    actualRecruitInput.value = weekData.actualRecruit;
+                    transferInInput.value = weekData.transferIn;
+                    transferOutInput.value = weekData.transferOut;
+                    resignInput.value = weekData.resign;
+                    transferOutReasonInput.value = weekData.transferOutReason || "";
+                    resignReasonInput.value = weekData.resignReason || "";
+                }
+            }
+        }
+    </script>
+</body>
+</html>
